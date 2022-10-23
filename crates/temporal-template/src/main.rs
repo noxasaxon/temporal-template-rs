@@ -1,8 +1,65 @@
-use temporal_sdk_helpers::activity_server_example_main;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::{str::FromStr, sync::Arc};
+use temporal_sdk::{sdk_client_options, ActContext, WfContext, WfExitValue, Worker};
+use temporal_sdk_core::{init_worker, telemetry_init, TelemetryOptionsBuilder, Url};
+use temporal_sdk_core_api::worker::WorkerConfigBuilder;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("starting test worker server");
 
-    activity_server_example_main().await
+    let server_options = sdk_client_options(Url::from_str("http://localhost:7233")?).build()?;
+
+    let client = server_options.connect("default", None, None).await?;
+
+    let telemetry_options = TelemetryOptionsBuilder::default().build()?;
+    telemetry_init(&telemetry_options)?;
+
+    let worker_config = WorkerConfigBuilder::default()
+        .namespace("security-engineering")
+        .task_queue("task_queue")
+        .worker_build_id("some_unique_thing")
+        .build()?;
+
+    let core_worker = init_worker(worker_config, client);
+
+    let mut worker = Worker::new_from_core(Arc::new(core_worker), "task_queue");
+    worker.register_activity(
+        "echo_activity",
+        |_ctx: ActContext, echo_me: String| async move { Ok(echo_me) },
+    );
+
+    // testing new stuff for workflow functions
+    worker.register_wf("test_workflow_fn", test_workflow_fn);
+
+    worker.run().await?;
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct TestWFInput {
+    name: String,
+    team: String,
+}
+
+/// Current core_sdk won't let you return anything from WF
+// async fn test_workflow_fn(input: TestWFInput) -> Result<String> {
+async fn test_workflow_fn(ctx: WfContext) -> Result<WfExitValue<()>> {
+    let args = ctx.get_args();
+    let input: TestWFInput =
+        serde_json::from_slice(&args.first().expect("No argument passed to workflow").data)
+            .expect("Failed to deserialize wf arg into expected input struct");
+
+    let msg = format!(
+        "Hello {}, from team {}",
+        input.name,
+        input.team.to_uppercase()
+    );
+
+    println!("{}", &msg);
+
+    // Ok(WfExitValue::Normal(()))
+    Ok(().into())
 }
