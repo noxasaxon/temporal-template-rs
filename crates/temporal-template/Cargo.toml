@@ -1,0 +1,28 @@
+[package]
+name = "temporal-template"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.63"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+toolbox = {path = "../toolbox"}
+temporal_sdk_helpers = {path = "../temporal_sdk_helpers"}
+
+anyhow = {version = "1.0", features = ["backtrace"]}
+temporal-client = { git = "https://github.com/temporalio/sdk-core", rev = "3d080cd" }
+temporal-sdk = { git = "https://github.com/temporalio/sdk-core", rev = "3d080cd" }
+temporal-sdk-core-protos = { git = "https://github.com/temporalio/sdk-core", rev = "3d080cd" }
+url = "2.3.1"
+uuid = "1.1.2"
+
+# Serialization
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+
+
+temporal-sdk-core = { git = "https://github.com/temporalio/sdk-core", rev = "3d080cd" }
+temporal-sdk-core-api = { git = "https://github.com/temporalio/sdk-core", rev = "3d080cd" }
+
+tokio = "1.21"
