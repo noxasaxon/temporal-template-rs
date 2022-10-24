@@ -2207,6 +2207,8 @@ dependencies = [
  "temporal-sdk",
  "temporal-sdk-core",
  "temporal-sdk-core-api",
+ "temporal-sdk-core-protos",
+ "temporal_sdk_helpers",
  "tokio",
  "url",
  "uuid",

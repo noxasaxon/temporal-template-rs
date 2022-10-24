@@ -75,7 +75,7 @@ pub async fn signal_temporal(
     signal_info: SignalTemporal,
 ) -> Result<SignalWorkflowExecutionResponse> {
     let input = signal_info.input.map(|inputs| Payloads {
-        payloads: inputs.into_iter().map(|item| new_payload(item)).collect(),
+        payloads: inputs.into_iter().map(|item| as_payload(item)).collect(),
     });
 
     let mut client = build_temporal_client_without_namespace(DEFAULT_TEMPORAL_ROLE).await?;
@@ -135,7 +135,7 @@ pub fn build_workflow_execution_request(
     let options = options.unwrap_or_default();
 
     let input = input.map(|inputs| Payloads {
-        payloads: inputs.into_iter().map(|item| new_payload(item)).collect(),
+        payloads: inputs.into_iter().map(|item| as_payload(item)).collect(),
     });
 
     StartWorkflowExecutionRequest {
@@ -160,7 +160,7 @@ pub fn build_workflow_execution_request(
     }
 }
 
-fn new_payload(value: serde_json::Value) -> Payload {
+pub fn as_payload(value: serde_json::Value) -> Payload {
     let mut metadata = HashMap::new();
     metadata.insert("encoding".to_string(), b"json/plain".to_vec());
 
