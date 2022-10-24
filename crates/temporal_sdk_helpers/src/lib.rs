@@ -1,21 +1,19 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use temporal_client::{
-    self, ConfiguredClient, RetryClient, TemporalServiceClientWithMetrics, WorkflowOptions,
-};
-use temporal_sdk_core::{
-    init_worker, Worker as CoreWorker, WorkerConfigBuilder as CoreWorkerConfigBuilder,
-};
-use temporal_sdk_core_protos::temporal::api::{
-    common::v1::{Payload, Payloads, WorkflowExecution, WorkflowType},
-    enums::v1::TaskQueueKind,
-    query::v1::WorkflowQuery,
-    taskqueue::v1::TaskQueue,
-    workflowservice::v1::{
-        QueryWorkflowRequest, QueryWorkflowResponse, SignalWorkflowExecutionRequest,
-        SignalWorkflowExecutionResponse, StartWorkflowExecutionRequest,
-        StartWorkflowExecutionResponse,
+use temporal_client::{self, ConfiguredClient, RetryClient, TemporalServiceClientWithMetrics};
+use temporal_sdk_core_protos::{
+    coresdk::AsJsonPayloadExt,
+    temporal::api::{
+        common::v1::{Payload, Payloads, WorkflowExecution, WorkflowType},
+        enums::v1::TaskQueueKind,
+        query::v1::WorkflowQuery,
+        taskqueue::v1::TaskQueue,
+        workflowservice::v1::{
+            QueryWorkflowRequest, QueryWorkflowResponse, SignalWorkflowExecutionRequest,
+            SignalWorkflowExecutionResponse, StartWorkflowExecutionRequest,
+            StartWorkflowExecutionResponse,
+        },
     },
 };
 use toolbox::{get_host_from_env, get_port_from_env};
@@ -75,7 +73,10 @@ pub async fn signal_temporal(
     signal_info: SignalTemporal,
 ) -> Result<SignalWorkflowExecutionResponse> {
     let input = signal_info.input.map(|inputs| Payloads {
-        payloads: inputs.into_iter().map(|item| as_payload(item)).collect(),
+        payloads: inputs
+            .into_iter()
+            .map(|arg| arg.as_json_payload().unwrap())
+            .collect(),
     });
 
     let mut client = build_temporal_client_without_namespace(DEFAULT_TEMPORAL_ROLE).await?;
@@ -124,6 +125,15 @@ pub async fn start_temporal_workflow(
     Ok(execution_response.into_inner())
 }
 
+pub fn to_json_payloads(args: Vec<serde_json::Value>) -> Payloads {
+    Payloads {
+        payloads: args
+            .iter()
+            .map(|arg| arg.as_json_payload().unwrap())
+            .collect(),
+    }
+}
+
 pub fn build_workflow_execution_request(
     namespace: String,
     input: Option<Vec<serde_json::Value>>,
@@ -134,9 +144,7 @@ pub fn build_workflow_execution_request(
 ) -> StartWorkflowExecutionRequest {
     let options = options.unwrap_or_default();
 
-    let input = input.map(|inputs| Payloads {
-        payloads: inputs.into_iter().map(|item| as_payload(item)).collect(),
-    });
+    let input = input.map(|wf_input_args| to_json_payloads(wf_input_args));
 
     StartWorkflowExecutionRequest {
         namespace,
@@ -157,16 +165,6 @@ pub fn build_workflow_execution_request(
         search_attributes: options.search_attributes.and_then(|d| d.try_into().ok()),
         cron_schedule: options.cron_schedule.unwrap_or_default(),
         ..Default::default()
-    }
-}
-
-pub fn as_payload(value: serde_json::Value) -> Payload {
-    let mut metadata = HashMap::new();
-    metadata.insert("encoding".to_string(), b"json/plain".to_vec());
-
-    Payload {
-        metadata,
-        data: value.to_string().into_bytes(),
     }
 }
 
@@ -276,53 +274,3 @@ pub struct TemporalSignalResponse {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TemporalQueryResponse {}
-
-pub async fn create_worker(
-    namespace: String,
-    task_queue: String,
-    worker_build_id: String,
-) -> Result<CoreWorker> {
-    let client = build_temporal_client_without_namespace("temporal").await?;
-
-    let worker_config = CoreWorkerConfigBuilder::default()
-        .namespace(namespace)
-        .task_queue(task_queue)
-        .worker_build_id(worker_build_id)
-        .build()?;
-
-    Ok(init_worker(worker_config, client))
-}
-
-// An example of running an activity worker:
-// ```no_run
-// use std::{str::FromStr, sync::Arc};
-// use temporal_sdk::{sdk_client_options, ActContext, Worker};
-// use temporal_sdk_core::{init_worker, telemetry_init, TelemetryOptionsBuilder, Url};
-// use temporal_sdk_core_api::worker::WorkerConfigBuilder;
-//
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let server_options = sdk_client_options(Url::from_str("http://localhost:7233")?).build()?;
-//
-//     let client = server_options.connect("default", None, None).await?;
-//
-//     let telemetry_options = TelemetryOptionsBuilder::default().build()?;
-//     telemetry_init(&telemetry_options)?;
-//
-//     let worker_config = WorkerConfigBuilder::default()
-//         .namespace("default")
-//         .task_queue("task_queue")
-//         .build()?;
-//
-//     let core_worker = init_worker(worker_config, client);
-//
-//     let mut worker = Worker::new_from_core(Arc::new(core_worker), "task_queue");
-//     worker.register_activity(
-//         "echo_activity",
-//         |_ctx: ActContext, echo_me: String| async move { Ok(echo_me) },
-//     );
-//
-//     worker.run().await?;
-//
-//     Ok(())
-// }

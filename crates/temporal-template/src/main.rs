@@ -14,9 +14,6 @@ use temporal_sdk_core::{
 use temporal_sdk_core_api::worker::WorkerConfigBuilder;
 
 use temporal_sdk_core_protos::coresdk::activity_result::activity_resolution::Status;
-use temporal_sdk_core_protos::coresdk::activity_result::{
-    ActivityExecutionResult, ActivityResolution,
-};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -104,6 +101,7 @@ async fn test_workflow_fn(ctx: WfContext) -> Result<WfExitValue<()>> {
         .activity(ActivityOptions {
             activity_type: "test_activity_fn".to_string(),
             start_to_close_timeout: Some(Duration::from_secs(50)),
+            // activity fn can only take a single argument
             input: input.as_json_payload().expect("serializes fine"),
             ..Default::default()
         })
