@@ -1,1 +1,1 @@
-# temlplate_rust
+# Temporal Worker Template - Rust

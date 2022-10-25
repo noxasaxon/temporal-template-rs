@@ -12,7 +12,6 @@ use temporal_sdk_core::{
     init_worker, protos::coresdk::AsJsonPayloadExt, telemetry_init, TelemetryOptionsBuilder, Url,
 };
 use temporal_sdk_core_api::worker::WorkerConfigBuilder;
-
 use temporal_sdk_core_protos::coresdk::activity_result::activity_resolution::Status;
 
 #[tokio::main]

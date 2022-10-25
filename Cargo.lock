@@ -2208,25 +2208,7 @@ dependencies = [
  "temporal-sdk-core",
  "temporal-sdk-core-api",
  "temporal-sdk-core-protos",
- "temporal_sdk_helpers",
  "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "temporal_sdk_helpers"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "temporal-client",
- "temporal-sdk",
- "temporal-sdk-core",
- "temporal-sdk-core-api",
- "temporal-sdk-core-protos",
- "toolbox",
  "url",
  "uuid",
 ]
@@ -2422,13 +2404,6 @@ dependencies = [
  "prost-build",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "toolbox"
-version = "0.1.0"
-dependencies = [
- "anyhow",
 ]
 
 [[package]]
