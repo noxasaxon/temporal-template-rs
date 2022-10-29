@@ -1,5 +1,9 @@
+mod temp;
+
 use anyhow::Result;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use slack_morphism::prelude::*;
 use std::{
     str::FromStr,
     sync::Arc,
@@ -13,6 +17,8 @@ use temporal_sdk_core::{
 };
 use temporal_sdk_core_api::worker::WorkerConfigBuilder;
 use temporal_sdk_core_protos::coresdk::activity_result::activity_resolution::Status;
+
+use crate::temp::{build_slack_info_string, SignalTemporal, TemporalInteraction};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,8 +47,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     worker.register_activity("test_activity_fn", test_activity_fn);
 
+    worker.register_activity("test_slack_activity", test_slack_activity);
+
     // testing new stuff for workflow functions
     worker.register_wf("test_workflow_fn", test_workflow_fn);
+
+    worker.register_wf(
+        "test_workflow_fn_that_waits_for_signal",
+        test_workflow_fn_that_waits_for_signal,
+    );
 
     worker.run().await?;
 
@@ -127,4 +140,92 @@ async fn test_workflow_fn(ctx: WfContext) -> Result<WfExitValue<()>> {
 
     // Ok(WfExitValue::Normal(()))
     Ok(().into())
+}
+
+const SIGNAL_NAME: &str = "test-signal";
+
+/// Current core_sdk won't let you return anything from WF
+// async fn test_workflow_fn(input: TestWFInput) -> Result<String> {
+async fn test_workflow_fn_that_waits_for_signal(ctx: WfContext) -> Result<WfExitValue<()>> {
+    println!("{:?} - Workflow time before activity", Instant::now());
+    let resp = ctx
+        .activity(ActivityOptions {
+            activity_type: "test_slack_activity".to_string(),
+            start_to_close_timeout: Some(Duration::from_secs(50)),
+            // activity fn can only take a single argument
+            input: "some_name".as_json_payload().expect("serializes fine"),
+            ..Default::default()
+        })
+        .await;
+    println!("{:?} - Workflow time AFTER activity", Instant::now());
+
+    println!("{:?} - Workflow time before waiting signal", Instant::now());
+    let signal_resp = ctx.make_signal_channel(SIGNAL_NAME).next().await.unwrap();
+    println!("{:?} - Workflow time AFTER waiting signal", Instant::now());
+
+    let json_values = signal_resp.input[..]
+        .iter()
+        .map(|pload| serde_json::to_value(&pload.data).unwrap())
+        .collect::<Vec<serde_json::Value>>();
+
+    println!("{:?} - signal resp", json_values);
+
+    println!(" - End workflow");
+
+    // Ok(WfExitValue::Normal(()))
+    Ok(().into())
+}
+
+async fn test_slack_activity(ctx: ActContext, channel_id: String) -> Result<()> {
+    println!("{:?} - Activity time before slack", Instant::now());
+
+    let client = SlackClient::new(SlackClientHyperConnector::new());
+
+    let slack_xoxb_token = std::env::var("SLACK_TOKEN")?;
+
+    let token: SlackApiToken = SlackApiToken::new(slack_xoxb_token.into());
+
+    // Sessions are lightweight and basically just a reference to client and token
+    let session = client.open_session(&token);
+    println!("{:#?}", session);
+
+    let activity_info = ctx.get_info();
+    let execution = activity_info.workflow_execution.as_ref().unwrap();
+
+    let signal = TemporalInteraction::Signal(SignalTemporal {
+        namespace: activity_info.workflow_namespace.clone(),
+        task_queue: activity_info.task_queue.clone(),
+        workflow_id: Some(execution.workflow_id.clone()),
+        run_id: Some(execution.run_id.clone()),
+        signal_name: SIGNAL_NAME.to_string(),
+        ..Default::default()
+    });
+
+    let parsed_temporal_info_with_action_id = build_slack_info_string(signal).into();
+
+    let test = session
+        .chat_post_message(&slack_morphism::api::SlackApiChatPostMessageRequest::new(
+            channel_id.into(),
+            SlackMessageContent::new()
+                .with_text("hi".into())
+                .with_blocks(slack_blocks![
+                    some_into(SlackSectionBlock::new().with_text(md!("hi "))),
+                    some_into(SlackDividerBlock::new()),
+                    some_into(SlackHeaderBlock::new(pt!("Simple header"))),
+                    some_into(SlackActionsBlock::new(slack_blocks![some_into(
+                        SlackBlockButtonElement::new(
+                            "simple-message-button".into(),
+                            pt!("Simple button text")
+                        )
+                        .with_action_id(parsed_temporal_info_with_action_id)
+                    )]))
+                ]),
+        ))
+        .await?;
+
+    println!("{:#?}", test);
+
+    println!("{:?} - Activity time AFTER slack", Instant::now());
+
+    Ok(())
 }
