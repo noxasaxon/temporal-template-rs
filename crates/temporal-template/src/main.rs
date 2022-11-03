@@ -147,7 +147,6 @@ const SIGNAL_NAME: &str = "test-signal";
 /// Current core_sdk won't let you return anything from WF
 // async fn test_workflow_fn(input: TestWFInput) -> Result<String> {
 async fn test_workflow_fn_that_waits_for_signal(ctx: WfContext) -> Result<WfExitValue<()>> {
-    println!("{:?} - Workflow time before activity", Instant::now());
     let resp = ctx
         .activity(ActivityOptions {
             activity_type: "test_slack_activity".to_string(),
@@ -157,20 +156,13 @@ async fn test_workflow_fn_that_waits_for_signal(ctx: WfContext) -> Result<WfExit
             ..Default::default()
         })
         .await;
-    println!("{:?} - Workflow time AFTER activity", Instant::now());
 
-    println!("{:?} - Workflow time before waiting signal", Instant::now());
     let signal_resp = ctx.make_signal_channel(SIGNAL_NAME).next().await.unwrap();
-    println!("{:?} - Workflow time AFTER waiting signal", Instant::now());
 
     let json_values = signal_resp.input[..]
         .iter()
         .map(|pload| serde_json::to_value(&pload.data).unwrap())
         .collect::<Vec<serde_json::Value>>();
-
-    println!("{:?} - signal resp", json_values);
-
-    println!(" - End workflow");
 
     // Ok(WfExitValue::Normal(()))
     Ok(().into())
@@ -187,7 +179,6 @@ async fn test_slack_activity(ctx: ActContext, channel_id: String) -> Result<()> 
 
     // Sessions are lightweight and basically just a reference to client and token
     let session = client.open_session(&token);
-    println!("{:#?}", session);
 
     let activity_info = ctx.get_info();
     let execution = activity_info.workflow_execution.as_ref().unwrap();
